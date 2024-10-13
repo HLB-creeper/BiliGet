@@ -1,6 +1,6 @@
 from PySide2.QtWidgets import *
 from PySide2.QtCore import Signal, QThread, Qt, QSize
-from PySide2.QtGui import QPixmap, QFont
+from PySide2.QtGui import QPixmap
 import sys
 
 class ClickableLabel(QLabel):

@@ -3,7 +3,6 @@
 # from time import sleep
 from re import findall
 from json import loads
-from random import choice
 from os import mkdir, remove
 from os.path import exists
 from requests import get, Response

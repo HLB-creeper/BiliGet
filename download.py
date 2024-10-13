@@ -1,7 +1,7 @@
 import os
 import requests
 import sys
-from PySide2.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QProgressBar, QLabel, QHBoxLayout
+from PySide2.QtWidgets import *
 from PySide2.QtCore import QRunnable, Slot, Signal, QObject, QThreadPool, Qt
 import time, video
 from subprocess import check_output, DEVNULL, STDOUT
