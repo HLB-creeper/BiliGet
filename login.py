@@ -7,7 +7,7 @@ from PySide2.QtCore import QByteArray, QBuffer
 
 disable_warnings()
 # 变量初始化
-image: PilImage|None = None
+image: PilImage = None
 qrcode_key: str = ""
 session: Session = Session()
 session.headers.update({

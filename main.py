@@ -220,7 +220,7 @@ QScrollArea{
     def trans_data(self, timeStamp):
         # print(f"trans data: {timeStamp}")
         timeArray = localtime(timeStamp)
-        otherStyleTime = strftime("%Y年%m月%d日 %H:%M", timeArray)
+        otherStyleTime = strftime("%Y{y}%m{m}%d{d} %H:%M", timeArray).format(y='年', m='月', d='日')
         # print(f"other style time: {otherStyleTime}")
         return otherStyleTime
 

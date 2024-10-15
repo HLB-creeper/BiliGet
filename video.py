@@ -56,7 +56,7 @@ def get_video_info(url: str) -> dict:
         "title": findall(pattern="<h1 data-title=\"(.*?)\"", string=html)[0]
     }
 
-def save_video(url: str, title: str|None = None, path: str = "video\\") -> None:
+def save_video(url: str, title: str = None, path: str = "video\\") -> None:
     info: dict = get_video_info(url)
     # bilibili的音视频是分开的
     audio: bytes = get_response(url=info["audio_url"]).content

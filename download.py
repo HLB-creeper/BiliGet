@@ -19,7 +19,7 @@ class DownloadWorker(QRunnable):
     """ 下载工作线程 """
     global ffmpeg_path
 
-    def __init__(self, bv: str, title: str|None = None, path: str = "video\\"):
+    def __init__(self, bv: str, title: str = None, path: str = "video\\"):
         super().__init__()
         self.bv = bv
         self.url = f"https://www.bilibili.com/video/{bv}/"
