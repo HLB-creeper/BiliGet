@@ -8,7 +8,7 @@ from Ui_MainWindow import Ui_MainWindow
 from Ui_UserWindow import Ui_UserWindow
 from MyWidget import *
 from download import DownloadWorker
-import login, video
+import login
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -65,15 +65,7 @@ QScrollArea{
         self.list_downloads.setStyleSheet(style_list)
         # self.list_videos.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn) # 总是显示滚动条
         self.pbtn_download: QPushButton
-        self.cookie: dict = {
-            "DedeUserID": "3494353660020892", 
-            "DedeUserID__ckMd5": "47b872492f6c0cc3", 
-            "SESSDATA": "943378c1%2C1740575427%2C3e5d9%2A81CjBfgl8PkPGvEPG-lPgr-LtPUVC3mdeEcHjgwwl1wjLByGJFopL6Bh9zOdoI8mf9eD8SVl82OFp1MzJ1M0JmTzlKSHpTcnphZVhUVmVUSjNEQ1Y1TjQ4d2NYZFNUWXRhdmpUQU10RjNKbUFrZlBxTTRLaEJsU0tkUjVQOHVtYUtCeklsWUtpcHlBIIEC", 
-            "bili_jct": "574a4913903f83540e07122e3d237d63", 
-            "sid": "8k9ddh79"
-        }
-        self.set_cookie(self.cookie)
-        # self.cookie: dict = {}
+        self.cookie: dict = {}
         self.search_thread: MyThread = None
         self.pbtn_reverse: QPushButton
         self.pbtn_select_all: QPushButton
@@ -83,8 +75,8 @@ QScrollArea{
         # self.workers: list[DownloadWorker] = []
 
         # 绑定信号与槽
-        self.user_window.send_cookie.connect(self.set_cookie)
-        self.user_window.clear_cookie.connect(self.clear_cookie)
+        self.user_window.send_cookie.connect(self.update_cookie)
+        self.user_window.clear_cookie.connect(lambda: self.update_cookie(""))
         self.btn_user.clicked.connect(self.login)
         self.btn_setting.clicked.connect(lambda: print("setting clicked"))
         self.pbtn_search.clicked.connect(self.search_video)
@@ -134,16 +126,11 @@ QScrollArea{
             pass
         event.accept()
 
-    def set_cookie(self, cookie: dict) -> None:
-        self.cookie = cookie
-        login.session.cookies.update(cookie)
-        video.headers["Cookie"] = '; '.join([f'{key}={value}' for key, value in cookie.items()])
-        print("get cookie:", video.headers["Cookie"])
-
-    def clear_cookie(self) -> None:
-        self.cookie = {}
-        video.headers["cookie"] = ""
-        print(f"clear cookie: {self.cookie}")
+    def update_cookie(self, cookies: str = None) -> None:
+        if(not cookies): cookies = self.cookie
+        login.session.cookies.update(cookies)
+        DownloadWorker.headers["Cookie"] = '; '.join([f'{key}={value}' for key, value in cookies.items()])
+        print("get cookie:", cookies)
 
     def search_video(self) -> None:
         self.list_videos.clear()
@@ -198,7 +185,7 @@ QScrollArea{
 
     # ====================自定义函数====================
     def get_search_result(self, keyword: str) -> None:
-        data = video.get_response(f"https://api.bilibili.com/x/web-interface/wbi/search/type?search_type=video&page=1&page_size=50&platform=pc&keyword={keyword}").json()
+        data = DownloadWorker.get_response(f"https://api.bilibili.com/x/web-interface/wbi/search/type?search_type=video&page=1&page_size=50&platform=pc&keyword={keyword}").json()
 
         for i in range(50):
             bvid = data["data"]["result"][i]["bvid"]
@@ -211,7 +198,7 @@ QScrollArea{
                 continue
             img_url = "https:" + img_url if img_url[0:2]=="//" else img_url
             img_format: str = img_url.split(".")[-1]
-            img_bytes: bytes = video.get_response(img_url).content
+            img_bytes: bytes = DownloadWorker.get_response(img_url).content
             img = QPixmap()
             img.loadFromData(img_bytes, img_format)
             # print(f"get video info: {title}, {author}, {bvid}, {img_url}, {pubdate}")

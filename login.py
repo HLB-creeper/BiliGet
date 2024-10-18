@@ -27,9 +27,6 @@ def get_response(url: str, type: str = "get") -> Response:
 			response: Response = session.post(url=url, timeout=10)
 		else:
 			response: Response = session.get(url=url, timeout=10)
-		status_code: int = response.status_code
-		if status_code != 200: # 响应码不是200, 请求发生错误
-			raise Exception("status code is between 300 and 599, request error")
 		return response
 
 def get_qrcode() -> None:
@@ -87,17 +84,3 @@ def get_user_info() -> dict:
 		"name": name,
 		"image": image
 	}
-
-# def main() -> None:
-# 	get_qrcode()
-# 	print(f"请扫描二维码登录")
-# 	status = get_status()
-# 	while status:
-# 		print(f"二维码扫描状态: {status}")
-# 		sleep(0.5)
-# 		status = get_status()
-# 	print(f"登陆成功")
-# 	print(session.cookies.get_dict())
-
-# if __name__ == '__main__':
-# 	main()

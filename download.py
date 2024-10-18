@@ -1,12 +1,16 @@
 import os
 import requests
-import sys
+from json import loads
+from re import findall
 from PySide2.QtWidgets import *
-from PySide2.QtCore import QRunnable, Slot, Signal, QObject, QThreadPool, Qt
-import time, video
-from subprocess import check_output, DEVNULL, STDOUT
+from PySide2.QtCore import QRunnable, Slot, Signal, QObject
+import time
+from subprocess import check_output, STDOUT
+from requests import get, Response
+from urllib3 import disable_warnings
 
-ffmpeg_path = "ffmpeg\\bin\\ffmpeg.exe"  # 设置ffmpeg的路径
+disable_warnings()
+
 
 class DownloadSignals(QObject):
     """ 定义信号 """
@@ -15,15 +19,24 @@ class DownloadSignals(QObject):
     paused = Signal()
     resumed = Signal()
 
+
 class DownloadWorker(QRunnable):
     """ 下载工作线程 """
-    global ffmpeg_path
-
     def __init__(self, bv: str, title: str = None, path: str = "video\\"):
         super().__init__()
+        self.ffmpeg_path = "ffmpeg\\bin\\ffmpeg.exe"  # 设置ffmpeg的路径
+        self.headers: dict = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0",
+            'authority': 'api.vc.bilibili.com', 'accept': 'application/json, text/plain, */*',
+            'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6', 'content-type': 'application/x-www-form-urlencoded',
+            'origin': 'https://message.bilibili.com', 'referer': 'https://message.bilibili.com/',
+            'sec-ch-ua': '"Chromium";v="116", "Not)A;Brand";v="24", "Microsoft Edge";v="116"', 'sec-ch-ua-mobile': '?0', 'sec-ch-ua-platform': '"Windows"',
+            'sec-fetch-dest': 'empty', 'sec-fetch-mode': 'cors', 'sec-fetch-site': 'same-site',
+            "Connection": "close"
+        }
         self.bv = bv
         self.url = f"https://www.bilibili.com/video/{bv}/"
-        self.info = video.get_video_info(self.url)
+        self.info = self.get_video_info(self.url)
         self.title = title if title else self.info["title"]
         self.save_path = path
         self.signals = DownloadSignals()
@@ -32,9 +45,9 @@ class DownloadWorker(QRunnable):
     @Slot()
     def run(self):
         # try:
-        response1 = requests.get(self.info["audio_url"], stream=True, headers=video.headers)
+        response1 = requests.get(self.info["audio_url"], stream=True, headers=self.headers)
         audio_length = response1.headers.get('content-length')
-        response2 = requests.get(self.info["video_url"], stream=True, headers=video.headers)
+        response2 = requests.get(self.info["video_url"], stream=True, headers=self.headers)
         video_length = response2.headers.get('content-length')
 
         # 如果没有Content-Length头部
@@ -68,7 +81,7 @@ class DownloadWorker(QRunnable):
                 dl += len(data)
                 f.write(data)
                 self.signals.progress.emit(int(dl * 100 // total_length))
-        check_output(f'{ffmpeg_path} -i "{self.save_path+self.bv}.mp4" -i "{self.save_path+self.bv}.mp3" -c:v copy -c:a copy "{self.save_path+self.title}.mp4"', shell=True, stderr=STDOUT)
+        check_output(f'{self.ffmpeg_path} -i "{self.save_path+self.bv}.mp4" -i "{self.save_path+self.bv}.mp3" -c:v copy -c:a copy "{self.save_path+self.title}.mp4"', shell=True, stderr=STDOUT)
         os.remove(f"{self.save_path+self.bv}.mp4")
         os.remove(f"{self.save_path+self.bv}.mp3")
         # os.rename(f"{self.save_path+self.bv}_ok.mp4", f"{self.save_path+self.title}.mp4")
@@ -87,78 +100,79 @@ class DownloadWorker(QRunnable):
         self._is_paused = False
         self.signals.resumed.emit()
 
-class DownloaderApp(QWidget):
-    def __init__(self, urls, base_dir):
-        super().__init__()
+    def get_video_info(self, url: str) -> dict:
+        html: str = self.get_response(url).content.decode()
+        datas: dict = loads(findall(pattern="<script>window.__playinfo__=(.*?)</script>", string=html)[0])
+        return {
+            "audio_url": datas["data"]["dash"]["audio"][0]["baseUrl"],
+            "video_url": datas["data"]["dash"]["video"][0]["baseUrl"],
+            "title": findall(pattern="<h1 data-title=\"(.*?)\"", string=html)[0]
+        }
 
-        self.urls = urls
-        self.base_dir = base_dir
-        self.workers = []
-        self.progress_bars = []
+    def get_response(self, url: str) -> Response:
+        # sleep(0.1)
+        return get(url=url, headers=self.headers, timeout=5, verify=False)
+        
 
-        self.initUI()
-        self.start_downloads()
+# class DownloaderApp(QWidget):
+#     def __init__(self, urls, base_dir):
+#         super().__init__()
 
-    def initUI(self):
-        layout = QVBoxLayout()
+#         self.urls = urls
+#         self.base_dir = base_dir
+#         self.workers = []
+#         self.progress_bars = []
 
-        for i in range(len(self.urls)):
-            h_layout = QHBoxLayout()
-            label = QLabel(f"文件 {i+1}:")
-            h_layout.addWidget(label)
+#         self.initUI()
+#         self.start_downloads()
 
-            progress_bar = QProgressBar()
-            progress_bar.setAlignment(Qt.AlignCenter)
-            self.progress_bars.append(progress_bar)
-            h_layout.addWidget(progress_bar)
+#     def initUI(self):
+#         layout = QVBoxLayout()
 
-            layout.addLayout(h_layout)
+#         for i in range(len(self.urls)):
+#             h_layout = QHBoxLayout()
+#             label = QLabel(f"文件 {i+1}:")
+#             h_layout.addWidget(label)
 
-        self.pause_button = QPushButton("暂停所有")
-        self.pause_button.clicked.connect(self.pause_all)
-        layout.addWidget(self.pause_button)
+#             progress_bar = QProgressBar()
+#             progress_bar.setAlignment(Qt.AlignCenter)
+#             self.progress_bars.append(progress_bar)
+#             h_layout.addWidget(progress_bar)
 
-        self.resume_button = QPushButton("恢复所有")
-        self.resume_button.clicked.connect(self.resume_all)
-        layout.addWidget(self.resume_button)
+#             layout.addLayout(h_layout)
 
-        self.setLayout(layout)
-        self.setWindowTitle("下载器")
+#         self.pause_button = QPushButton("暂停所有")
+#         self.pause_button.clicked.connect(self.pause_all)
+#         layout.addWidget(self.pause_button)
 
-    def start_downloads(self):
-        thread_pool = QThreadPool.globalInstance()
-        max_threads = min(50, thread_pool.maxThreadCount())
-        thread_pool.setMaxThreadCount(max_threads)  # 设置最大线程数
+#         self.resume_button = QPushButton("恢复所有")
+#         self.resume_button.clicked.connect(self.resume_all)
+#         layout.addWidget(self.resume_button)
 
-        for i, url in enumerate(self.urls):
-            worker = DownloadWorker(url)
-            worker.signals.progress.connect(lambda value, idx=i: self.update_progress(value, idx))
-            worker.signals.finished.connect(lambda msg: print(msg))
-            worker.signals.paused.connect(lambda: print("下载已暂停"))
-            worker.signals.resumed.connect(lambda: print("下载已恢复"))
-            self.workers.append(worker)
-            thread_pool.start(worker)
+#         self.setLayout(layout)
+#         self.setWindowTitle("下载器")
 
-    def update_progress(self, value, index):
-        self.progress_bars[index].setValue(value)
+#     def start_downloads(self):
+#         thread_pool = QThreadPool.globalInstance()
+#         max_threads = min(50, thread_pool.maxThreadCount())
+#         thread_pool.setMaxThreadCount(max_threads)  # 设置最大线程数
 
-    def pause_all(self):
-        for worker in self.workers:
-            worker.pause()
+#         for i, url in enumerate(self.urls):
+#             worker = DownloadWorker(url)
+#             worker.signals.progress.connect(lambda value, idx=i: self.update_progress(value, idx))
+#             worker.signals.finished.connect(lambda msg: print(msg))
+#             worker.signals.paused.connect(lambda: print("下载已暂停"))
+#             worker.signals.resumed.connect(lambda: print("下载已恢复"))
+#             self.workers.append(worker)
+#             thread_pool.start(worker)
 
-    def resume_all(self):
-        for worker in self.workers:
-            worker.resume()
+#     def update_progress(self, value, index):
+#         self.progress_bars[index].setValue(value)
 
-if __name__ == "__main__":
-    urls = [
-        "BV1jqtFedEbp",
-        "BV1QgtVeDEbD"
-    ]
-    base_dir = "./downloads"  # 设置文件保存的基本目录
-    os.makedirs(base_dir, exist_ok=True)  # 确保目录存在
+#     def pause_all(self):
+#         for worker in self.workers:
+#             worker.pause()
 
-    app = QApplication(sys.argv)
-    ex = DownloaderApp(urls, base_dir)
-    ex.show()
-    sys.exit(app.exec_())
+#     def resume_all(self):
+#         for worker in self.workers:
+#             worker.resume()
