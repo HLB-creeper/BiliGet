@@ -2,7 +2,6 @@
 
 import json
 from time import sleep, localtime, strftime
-from os.path import exists
 # from typing import *
 from PySide2.QtWidgets import *
 from PySide2.QtCore import Signal, Qt, QThreadPool
