@@ -95,18 +95,3 @@ QProgressBar::chunk {
         # self.widget.mousePressEvent = lambda event: print('', end='')
         parent.addItem(self)
         parent.setItemWidget(self, self.widget)
-    
-
-
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-
-    list_widget = QListWidget()
-    item = DownloadItem(QPixmap("./img/1.jpg"), "[UID] B站最高只能支持19位UID？溢出后是一片空白！", "Lucky-101", "BV17x411K7", list_widget)
-    # list_widget.addItem(item)
-    # list_widget.setItemWidget(item, item.widget)
-
-    list_widget.show()
-    sys.exit(app.exec_())

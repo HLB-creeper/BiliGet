@@ -1,13 +1,12 @@
 import os
-import requests
 from json import loads
 from re import findall
 from PySide2.QtWidgets import *
 from PySide2.QtCore import QRunnable, Slot, Signal, QObject
 import time
 from subprocess import check_output, STDOUT
-from requests import get, Response
 from urllib3 import disable_warnings
+from func import get_response
 
 disable_warnings()
 
@@ -25,15 +24,6 @@ class DownloadWorker(QRunnable):
     def __init__(self, bv: str, title: str = None, path: str = "video\\"):
         super().__init__()
         self.ffmpeg_path = "ffmpeg\\bin\\ffmpeg.exe"  # 设置ffmpeg的路径
-        self.headers: dict = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0",
-            'authority': 'api.vc.bilibili.com', 'accept': 'application/json, text/plain, */*',
-            'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6', 'content-type': 'application/x-www-form-urlencoded',
-            'origin': 'https://message.bilibili.com', 'referer': 'https://message.bilibili.com/',
-            'sec-ch-ua': '"Chromium";v="116", "Not)A;Brand";v="24", "Microsoft Edge";v="116"', 'sec-ch-ua-mobile': '?0', 'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty', 'sec-fetch-mode': 'cors', 'sec-fetch-site': 'same-site',
-            "Connection": "close"
-        }
         self.bv = bv
         self.url = f"https://www.bilibili.com/video/{bv}/"
         self.info = self.get_video_info(self.url)
@@ -44,51 +34,51 @@ class DownloadWorker(QRunnable):
 
     @Slot()
     def run(self):
-        # try:
-        response1 = requests.get(self.info["audio_url"], stream=True, headers=self.headers)
-        audio_length = response1.headers.get('content-length')
-        response2 = requests.get(self.info["video_url"], stream=True, headers=self.headers)
-        video_length = response2.headers.get('content-length')
+        try:
+            response1 = get_response(self.info["audio_url"], stream=True)
+            audio_length = response1.headers.get('content-length')
+            response2 = get_response(self.info["video_url"], stream=True)
+            video_length = response2.headers.get('content-length')
 
-        # 如果没有Content-Length头部
-        if audio_length is None or video_length is None:
-            with open(self.save_path + f"\\{self.bv}.mp3", 'wb') as f1:
-                f1.write(response1.content)
-            with open(self.save_path + f"\\{self.bv}.mp4", 'wb') as f2:
-                f2.write(response2.content)
-            return
-        audio_length = int(audio_length)
-        video_length = int(video_length)
-        total_length = audio_length + video_length
-        dl = 0
+            # 如果没有Content-Length头部
+            if audio_length is None or video_length is None:
+                with open(self.save_path + f"\\{self.bv}.mp3", 'wb') as f1:
+                    f1.write(response1.content)
+                with open(self.save_path + f"\\{self.bv}.mp4", 'wb') as f2:
+                    f2.write(response2.content)
+                return
+            audio_length = int(audio_length)
+            video_length = int(video_length)
+            total_length = audio_length + video_length
+            dl = 0
 
-        # 下载音频
-        with open(f"{self.save_path+self.bv}.mp3", 'wb') as f:
-            for data in response1.iter_content(chunk_size=4096):
-                while self._is_paused:  # 检查是否暂停
-                    self.signals.paused.emit()  # 发送暂停信号
-                    time.sleep(0.1)  # 等待一段时间后再次检查
-                dl += len(data)
-                f.write(data)
-                self.signals.progress.emit(int(dl * 100 // total_length))  # 根据音频的进度发送信号
+            # 下载音频
+            with open(f"{self.save_path+self.bv}.mp3", 'wb') as f:
+                for data in response1.iter_content(chunk_size=4096):
+                    while self._is_paused:  # 检查是否暂停
+                        self.signals.paused.emit()  # 发送暂停信号
+                        time.sleep(0.1)  # 等待一段时间后再次检查
+                    dl += len(data)
+                    f.write(data)
+                    self.signals.progress.emit(int(dl * 100 // total_length))  # 根据音频的进度发送信号
 
-        # 下载视频
-        with open(f"{self.save_path+self.bv}.mp4", 'wb') as f:
-            for data in response2.iter_content(chunk_size=4096):
-                while self._is_paused:  # 检查是否暂停
-                    self.signals.paused.emit()  # 发送暂停信号
-                    time.sleep(0.1)  # 等待一段时间后再次检查
-                dl += len(data)
-                f.write(data)
-                self.signals.progress.emit(int(dl * 100 // total_length))
-        check_output(f'{self.ffmpeg_path} -i "{self.save_path+self.bv}.mp4" -i "{self.save_path+self.bv}.mp3" -c:v copy -c:a copy "{self.save_path+self.title}.mp4"', shell=True, stderr=STDOUT)
-        os.remove(f"{self.save_path+self.bv}.mp4")
-        os.remove(f"{self.save_path+self.bv}.mp3")
-        # os.rename(f"{self.save_path+self.bv}_ok.mp4", f"{self.save_path+self.title}.mp4")
-        self.signals.finished.emit(f"完成：{self.save_path}")
-        # except Exception as e:
-        #     print(f"下载失败: {e}")
-        #     self.signals.finished.emit(f"失败：{self.save_path}")
+            # 下载视频
+            with open(f"{self.save_path+self.bv}.mp4", 'wb') as f:
+                for data in response2.iter_content(chunk_size=4096):
+                    while self._is_paused:  # 检查是否暂停
+                        self.signals.paused.emit()  # 发送暂停信号
+                        time.sleep(0.1)  # 等待一段时间后再次检查
+                    dl += len(data)
+                    f.write(data)
+                    self.signals.progress.emit(int(dl * 100 // total_length))
+            check_output(f'{self.ffmpeg_path} -i "{self.save_path+self.bv}.mp4" -i "{self.save_path+self.bv}.mp3" -c:v copy -c:a copy "{self.save_path+self.title}.mp4"', shell=True, stderr=STDOUT)
+            os.remove(f"{self.save_path+self.bv}.mp4")
+            os.remove(f"{self.save_path+self.bv}.mp3")
+            # os.rename(f"{self.save_path+self.bv}_ok.mp4", f"{self.save_path+self.title}.mp4")
+            self.signals.finished.emit(f"完成：{self.save_path}")
+        except Exception as e:
+            print(f"下载失败: {e}")
+            self.signals.finished.emit(f"失败：{self.save_path}")
 
     def pause(self):
         """ 暂停下载 """
@@ -101,17 +91,13 @@ class DownloadWorker(QRunnable):
         self.signals.resumed.emit()
 
     def get_video_info(self, url: str) -> dict:
-        html: str = self.get_response(url).content.decode()
+        html: str = get_response(url).content.decode()
         datas: dict = loads(findall(pattern="<script>window.__playinfo__=(.*?)</script>", string=html)[0])
         return {
             "audio_url": datas["data"]["dash"]["audio"][0]["baseUrl"],
             "video_url": datas["data"]["dash"]["video"][0]["baseUrl"],
             "title": findall(pattern="<h1 data-title=\"(.*?)\"", string=html)[0]
         }
-
-    def get_response(self, url: str) -> Response:
-        # sleep(0.1)
-        return get(url=url, headers=self.headers, timeout=5, verify=False)
         
 
 # class DownloaderApp(QWidget):

@@ -8,6 +8,7 @@ from Ui_MainWindow import Ui_MainWindow
 from Ui_UserWindow import Ui_UserWindow
 from MyWidget import *
 from download import DownloadWorker
+import func
 import login
 
 
@@ -127,20 +128,23 @@ QScrollArea{
         event.accept()
 
     def update_cookie(self, cookies: str = None) -> None:
-        if(not cookies): cookies = self.cookie
-        login.session.cookies.update(cookies)
-        DownloadWorker.headers["Cookie"] = '; '.join([f'{key}={value}' for key, value in cookies.items()])
-        print("get cookie:", cookies)
+        if(cookies != None): self.cookie = cookies
+        login.session.cookies.update(self.cookie)
+        func.headers["Cookie"] = '; '.join([f'{key}={value}' for key, value in self.cookie.items()])
+        print("get cookie:", self.cookie)
 
     def search_video(self) -> None:
-        self.list_videos.clear()
-        if self.search_thread and self.search_thread.isRunning():
-            self.search_thread.terminate()
         get_type: int = self.combo_box_type.currentIndex() # 0: 关键词, 1: 链接
         get_text: str = self.line_edit_url.text()
         if not get_text:
             QMessageBox.warning(self, '警告', '请输入搜索内容！')
             return
+        if not self.cookie:
+            QMessageBox.warning(self, '警告', '请先登录！')
+            return
+        self.list_videos.clear()
+        if self.search_thread and self.search_thread.isRunning():
+            self.search_thread.terminate()
         if get_type == 0:
             self.search_thread = MyThread(parent=self, func=lambda: self.get_search_result(keyword=get_text))
             self.search_thread.start()
@@ -185,8 +189,7 @@ QScrollArea{
 
     # ====================自定义函数====================
     def get_search_result(self, keyword: str) -> None:
-        data = DownloadWorker.get_response(f"https://api.bilibili.com/x/web-interface/wbi/search/type?search_type=video&page=1&page_size=50&platform=pc&keyword={keyword}").json()
-
+        data = func.get_response(url=f"https://api.bilibili.com/x/web-interface/wbi/search/type?search_type=video&page=1&page_size=50&platform=pc&keyword={keyword}").json()
         for i in range(50):
             bvid = data["data"]["result"][i]["bvid"]
             title = data["data"]["result"][i]["title"].replace('<em class="keyword">', '').replace('</em>', '')
@@ -198,7 +201,7 @@ QScrollArea{
                 continue
             img_url = "https:" + img_url if img_url[0:2]=="//" else img_url
             img_format: str = img_url.split(".")[-1]
-            img_bytes: bytes = DownloadWorker.get_response(img_url).content
+            img_bytes: bytes = func.get_response(img_url).content
             img = QPixmap()
             img.loadFromData(img_bytes, img_format)
             # print(f"get video info: {title}, {author}, {bvid}, {img_url}, {pubdate}")
@@ -214,10 +217,6 @@ QScrollArea{
     def download_finished(self, item: DownloadItem) -> None:
         self.list_downloads.takeItem(self.list_downloads.row(item))
         # self.workers.remove(self.workers.index(item))
-
-    # def get_video_type(self, bvid: str) -> None:
-    # 	# data = video.get_response(f"https://api.bilibili.com/x/web-interface/view?bvid={bvid}").json()
-    # 	pass
 
     # ====================重写事件====================
     def keyPressEvent(self, event) -> None:
