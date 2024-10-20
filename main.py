@@ -1,6 +1,9 @@
 # -*- coding:utf-8 -*-
 
+import json
 from time import sleep, localtime, strftime
+from os.path import exists
+# from typing import *
 from PySide2.QtWidgets import *
 from PySide2.QtCore import Signal, Qt, QThreadPool
 from PySide2.QtGui import QPixmap
@@ -74,10 +77,12 @@ QScrollArea{
         max_threads = min(50, self.thread_pool.maxThreadCount())
         self.thread_pool.setMaxThreadCount(max_threads)  # 设置最大线程数
         # self.workers: list[DownloadWorker] = []
+        self.read_config()
 
         # 绑定信号与槽
         self.user_window.send_cookie.connect(self.update_cookie)
         self.user_window.clear_cookie.connect(lambda: self.update_cookie(""))
+        self.user_window.write_config.connect(self.write_config)
         self.btn_user.clicked.connect(self.login)
         self.btn_setting.clicked.connect(lambda: print("setting clicked"))
         self.pbtn_search.clicked.connect(self.search_video)
@@ -128,10 +133,13 @@ QScrollArea{
         event.accept()
 
     def update_cookie(self, cookies: str = None) -> None:
-        if(cookies != None): self.cookie = cookies
-        login.session.cookies.update(self.cookie)
-        func.headers["Cookie"] = '; '.join([f'{key}={value}' for key, value in self.cookie.items()])
-        print("get cookie:", self.cookie)
+        self.write_config()
+        if(cookies != None): 
+            self.cookie = cookies
+        if self.cookie: 
+            self.user_window.mode = 'logout'
+        login.session.headers.update({"Cookie": self.cookie})
+        func.headers["Cookie"] = self.cookie
 
     def search_video(self) -> None:
         get_type: int = self.combo_box_type.currentIndex() # 0: 关键词, 1: 链接
@@ -218,6 +226,26 @@ QScrollArea{
         self.list_downloads.takeItem(self.list_downloads.row(item))
         # self.workers.remove(self.workers.index(item))
 
+    def read_config(self) -> None:
+        # try:
+            with open('config.json', 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                self.__dict__.update(config)
+                self.update_cookie(config['cookie'])
+                print("read config:", config)
+        # except Exception as e:
+        #     QMessageBox.warning(self, '警告', '读取配置文件(config.json)错误，已重新创建配置文件')
+        #     print("read config error: ", e)
+        #     self.write_config()
+
+    def write_config(self) -> None:
+        config = {
+            'cookie': self.cookie
+        }
+        with open('config.json', 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=4)
+        print("write config:", config)
+
     # ====================重写事件====================
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key_Return:
@@ -226,6 +254,7 @@ QScrollArea{
 class UserWindow(QMainWindow, Ui_UserWindow):
     send_cookie: Signal = Signal(dict)
     clear_cookie: Signal = Signal()
+    write_config: Signal = Signal()
     def __init__(self, parent=None, mode: str = 'login') -> None:
         super(UserWindow, self).__init__(parent)
         self._setup_ui()
@@ -234,7 +263,7 @@ class UserWindow(QMainWindow, Ui_UserWindow):
         self.label: QLabel
         self.mode: str = mode
         self.layout_qrcode: QVBoxLayout
-        self.cookie: dict = {}
+        self.cookie: str = ""
         self.status: int = 0 # 0: 等待, 1: 已登录, 2: 重试
         self.check_login_thread: MyThread = MyThread(parent=self, func=self.check_login)
         self.is_ok: bool = False
@@ -296,8 +325,9 @@ class UserWindow(QMainWindow, Ui_UserWindow):
             if status == 0: # 已确认登录
                 self.status = 1
                 self.is_ok = True
-                self.cookie = login.session.cookies.get_policy()
+                self.cookie = '; '.join([f'{key}={value}' for key, value in login.session.cookies.get_dict().items()])
                 self.send_cookie.emit(self.cookie)
+                self.write_config.emit()
                 self.user_info = login.get_user_info()
                 print(f"get user info: {self.user_info}")
                 self.image.setPixmap(self.user_info["image"])
