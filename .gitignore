@@ -1,8 +1,8 @@
-# 忽略 ffmpeg 目录
-# ffmpeg/
-
 # 忽略 video 目录
 video/
 
 # 忽略所有临时文件
 temp*
+
+# 忽略所有 exe 文件
+*.exe
