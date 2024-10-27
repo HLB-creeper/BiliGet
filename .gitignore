@@ -12,3 +12,6 @@ __pycache__/
 
 # 忽略配置文件
 config.json
+
+# 忽略使用auto-py-to-exe打包文件夹
+output/

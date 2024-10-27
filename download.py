@@ -31,6 +31,7 @@ class DownloadWorker(QRunnable):
         self.save_path = path
         self.signals = DownloadSignals()
         self._is_paused = False  # 暂停标志
+        os.makedirs(self.save_path, exist_ok=True)
 
     @Slot()
     def run(self):

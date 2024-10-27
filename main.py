@@ -1,6 +1,8 @@
 # -*- coding:utf-8 -*-
 
 import json
+from re import match
+from math import ceil
 from time import sleep, localtime, strftime
 # from typing import *
 from PySide2.QtWidgets import *
@@ -13,9 +15,13 @@ from download import DownloadWorker
 import func
 import login
 
+__Author__ = "HLB"
+__Version__ = "Version 0.0.0"
+
 
 class MainWindow(QMainWindow, Ui_MainWindow):
     add_video: Signal = Signal(QPixmap, str, str, str, str)
+    show_warning: Signal = Signal(str)
     def __init__(self, parent=None) -> None:
         super(MainWindow, self).__init__(parent)
         self._setup_ui()
@@ -68,7 +74,7 @@ QScrollArea{
         self.list_downloads.setStyleSheet(style_list)
         # self.list_videos.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn) # 总是显示滚动条
         self.pbtn_download: QPushButton
-        self.cookie: dict = {}
+        self.cookie: str = ""
         self.search_thread: MyThread = None
         self.pbtn_reverse: QPushButton
         self.pbtn_select_all: QPushButton
@@ -90,6 +96,7 @@ QScrollArea{
         # self.list_videos.itemClicked.connect(lambda item: print(item.nameLabel.text(), end=''))
         self.pbtn_select_all.clicked.connect(self.select_all)
         self.pbtn_reverse.clicked.connect(self.select_reverse)
+        self.show_warning.connect(lambda msg: QMessageBox.warning(self, '警告', msg))
 
     def _setup_ui(self) -> None:
         self.setupUi(self)
@@ -99,13 +106,13 @@ QScrollArea{
         self.user_window.mode = 'logout'
 
         # 用户按钮
-        self.btn_user: ClickableLabel = ClickableLabel()
+        self.btn_user: RoundClickableLabel = RoundClickableLabel()
         self.btn_user.setFixedSize(50, 50)
         self.btn_user.setPixmap(QPixmap('./img/user.png'))
         self.layout_title.addWidget(self.btn_user)
 
         # 设置按钮
-        self.btn_setting: ClickableLabel = ClickableLabel()
+        self.btn_setting: RoundClickableLabel = RoundClickableLabel()
         self.btn_setting.setFixedSize(50, 50)
         self.btn_setting.setPixmap(QPixmap('./img/setting.png'))
         self.layout_title.addWidget(self.btn_setting)
@@ -139,6 +146,8 @@ QScrollArea{
             self.user_window.mode = 'logout'
         login.session.headers.update({"Cookie": self.cookie})
         func.headers["Cookie"] = self.cookie
+        self.update_uface()
+        self.write_config()
 
     def search_video(self) -> None:
         get_type: int = self.combo_box_type.currentIndex() # 0: 关键词, 1: 链接
@@ -152,11 +161,8 @@ QScrollArea{
         self.list_videos.clear()
         if self.search_thread and self.search_thread.isRunning():
             self.search_thread.terminate()
-        if get_type == 0:
-            self.search_thread = MyThread(parent=self, func=lambda: self.get_search_result(keyword=get_text))
-            self.search_thread.start()
-        if get_type == 1:
-            pass
+        self.search_thread = MyThread(parent=self, func=lambda: self.get_search_result(keyword=get_text, get_type=get_type))
+        self.search_thread.start()
     
     def add_video_item(self, img: QPixmap, title: str, author: str, pubdate: int, bvid: str) -> None:
         VideoItem(img, title, author, pubdate, bvid, self.list_videos)
@@ -195,24 +201,74 @@ QScrollArea{
             item.check_box.toggle()
 
     # ====================自定义函数====================
-    def get_search_result(self, keyword: str) -> None:
-        data = func.get_response(url=f"https://api.bilibili.com/x/web-interface/wbi/search/type?search_type=video&page=1&page_size=50&platform=pc&keyword={keyword}").json()
-        for i in range(50):
-            bvid = data["data"]["result"][i]["bvid"]
-            title = data["data"]["result"][i]["title"].replace('<em class="keyword">', '').replace('</em>', '')
-            author = data["data"]["result"][i]["author"]
-            img_url = data["data"]["result"][i]["pic"]
-            pubdate = data["data"]["result"][i]["pubdate"]
-            pubdate = self.trans_data(pubdate)
-            if not (img_url and title and author and bvid):
-                continue
-            img_url = "https:" + img_url if img_url[0:2]=="//" else img_url
-            img_format: str = img_url.split(".")[-1]
-            img_bytes: bytes = func.get_response(img_url).content
-            img = QPixmap()
-            img.loadFromData(img_bytes, img_format)
-            # print(f"get video info: {title}, {author}, {bvid}, {img_url}, {pubdate}")
-            self.add_video.emit(img, title, author, pubdate, bvid)
+    def get_search_result(self, keyword: str, get_type: int) -> None:
+        if get_type == 0: # 关键词搜索
+            data = func.get_response(url=f"https://api.bilibili.com/x/web-interface/wbi/search/type?search_type=video&page=1&page_size=50&platform=pc&keyword={keyword}").json()
+            for i in range(50):
+                info = self.get_search_info(data["data"]["result"][i])
+                author = data["data"]["result"][i]["author"]
+                if not (info and author):
+                    continue
+                self.add_video.emit(info["img"], info["title"], author, info["pubdate"], data["data"]["result"][i]["bvid"])
+        if get_type == 1: # 链接搜索
+            if(match(r"^https://www\.bilibili\.com/video/BV[a-zA-Z0-9]+.*", keyword) is not None):
+                bv = match(r"^https://www\.bilibili\.com/video/(BV[a-zA-Z0-9]+).*", keyword).group(1)
+                print(bv)
+                data = func.get_response(url=f"https://api.bilibili.com/x/web-interface/view?bvid={bv}").json()
+                if(data["code"]!=0):
+                    self.show_warning.emit('链接错误：bv号不存在！')
+                    return
+                info = self.get_search_info(data["data"])
+                author = data["data"]["owner"]["name"]
+                if not (info and author):
+                    return
+                self.add_video.emit(info["img"], info["title"], author, info["pubdate"], bv)
+            elif match(r"^https://space\.bilibili\.com/\d+/channel/collectiondetail\?sid=(\d+).*", keyword) is not None:
+                mid, sid = match(r"^https://space\.bilibili\.com/(\d+)/channel/collectiondetail\?sid=(\d+).*", keyword).groups()
+                # https://api.bilibili.com/x/polymer/web-space/seasons_archives_list?mid={mid}&season_id={sid}&page_size=100&page_num=1
+                data = func.get_response(url=f"https://api.bilibili.com/x/polymer/web-space/seasons_archives_list?mid={mid}&season_id={sid}&page_size=1&page_num=1").json()
+                total = data["data"]["meta"]["total"]
+                name = data["data"]["meta"]["name"]
+                for page in range(ceil(total/100)):
+                    data = func.get_response(url=f"https://api.bilibili.com/x/polymer/web-space/seasons_archives_list?mid={mid}&season_id={sid}&page_size=100&page_num={page+1}").json()
+                    for i in range(len(data["data"]["aids"])):
+                        info = self.get_search_info(data["data"]["archives"][i], use_ctime=True)
+                        if not (info and name):
+                            continue
+                        self.add_video.emit(info["img"], info["title"], name, info["pubdate"], data["data"]["archives"][i]["bvid"])
+        if get_type == 2: # BV号
+            # print("BV号搜索", keyword)
+            data = func.get_response(url=f"https://api.bilibili.com/x/web-interface/view?bvid={keyword}").json()
+            if(data["code"]!=0):
+                self.show_warning.emit('输入错误，请输入正确的BV号！')
+                return
+            info = self.get_search_info(data["data"])
+            author = data["data"]["owner"]["name"]
+            if not (info and author):
+                return
+            self.add_video.emit(info["img"], info["title"], author, info["pubdate"], keyword)
+    
+    def get_search_info(self, data, use_ctime: bool = False) -> dict:
+        bvid = data["bvid"]
+        title = data["title"].replace('<em class="keyword">', '').replace('</em>', '')
+        img_url = data["pic"]
+        if use_ctime:
+            pubdate = data["ctime"]
+        else:
+            pubdate = data["pubdate"]
+        pubdate = self.trans_data(pubdate)
+        if not (img_url and title and bvid):
+            return {}
+        img_url = "https:" + img_url if img_url[0:2]=="//" else img_url
+        img_format: str = img_url.split(".")[-1]
+        img_bytes: bytes = func.get_response(img_url).content
+        img = QPixmap()
+        img.loadFromData(img_bytes, img_format)
+        return {
+            "img" : img,
+            "title" : title,
+            "pubdate" : pubdate
+        }
 
     def trans_data(self, timeStamp):
         # print(f"trans data: {timeStamp}")
@@ -226,16 +282,16 @@ QScrollArea{
         # self.workers.remove(self.workers.index(item))
 
     def read_config(self) -> None:
-        # try:
+        try:
             with open('config.json', 'r', encoding='utf-8') as f:
                 config = json.load(f)
                 self.__dict__.update(config)
                 self.update_cookie(config['cookie'])
                 print("read config:", config)
-        # except Exception as e:
-        #     QMessageBox.warning(self, '警告', '读取配置文件(config.json)错误，已重新创建配置文件')
-        #     print("read config error: ", e)
-        #     self.write_config()
+        except Exception as e:
+            QMessageBox.warning(self, '警告', '读取配置文件(config.json)错误，已重新创建配置文件')
+            print("read config error: ", e)
+            self.write_config()
 
     def write_config(self) -> None:
         config = {
@@ -244,6 +300,14 @@ QScrollArea{
         with open('config.json', 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=4)
         print("write config:", config)
+    
+    def update_uface(self) -> None:
+        if not self.cookie:
+            return
+        if not (self.user_window.user_info):
+            self.user_window.user_info = login.get_user_info()
+            print(f"get user info: {self.user_window.user_info}")
+        self.btn_user.setPixmap(self.user_window.user_info["image"])
 
     # ====================重写事件====================
     def keyPressEvent(self, event) -> None:
@@ -278,8 +342,8 @@ class UserWindow(QMainWindow, Ui_UserWindow):
 
         # 二维码
         self.image: ClickableLabel = ClickableLabel()
-        self.image.setFixedSize(400, 400)
-        self.layout_qrcode.addWidget(self.image)
+        self.image.setFixedSize(350, 350)
+        self.layout_qrcode.addWidget(self.image, alignment=Qt.AlignCenter)
 
     def login(self) -> None:
         self.status = 0

@@ -1,7 +1,6 @@
 from PySide2.QtWidgets import *
 from PySide2.QtCore import Signal, QThread, Qt, QSize
-from PySide2.QtGui import QPixmap
-import sys
+from PySide2.QtGui import QPainter, QPainterPath
 
 class ClickableLabel(QLabel):
     clicked: Signal = Signal()
@@ -12,6 +11,27 @@ class ClickableLabel(QLabel):
 
     def mousePressEvent(self, event) -> None:
         self.clicked.emit()
+
+
+class RoundClickableLabel(ClickableLabel):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+
+    def paintEvent(self, event) -> None:
+    # 获取当前显示的图片
+        pixmap = self.pixmap()
+        if pixmap:
+            radius = min(self.width(), self.height()) / 2
+            # 创建 QPainter 对象
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing)
+            # 绘制圆形剪裁区域
+            path = QPainterPath()
+            path.addRoundedRect(
+                0, 0, self.width(), self.height(), radius, radius)
+            painter.setClipPath(path)
+            # 绘制图片
+            painter.drawPixmap(0, 0, pixmap.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
 
 class MyThread(QThread):
