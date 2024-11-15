@@ -7,8 +7,8 @@ temp*
 # 忽略所有 exe 文件
 *.exe
 
-# 忽略 __pycache__ 文件夹
-__pycache__/
+# # 忽略 __pycache__ 文件夹
+# __pycache__/
 
 # 忽略配置文件
 config.json

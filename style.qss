@@ -1,0 +1,71 @@
+* {
+    font-family: "Consolas, 'Courier New', monospace";
+}
+QRadioButton {
+    border: none;
+    border-radius: 20px;
+    padding: 10px;
+    padding-left: 20px;
+    padding-right: 20px;
+    /* margin-right: 10px; */
+    /* text-align: center; */
+    spacing: 0;
+}
+QTextBrowser {
+    background-color: transparent;
+    border: none;
+}
+QRadioButton::indicator {
+    /* left: -50% */
+    border: none;
+    /* opacity: none; */
+    /* background: none; */
+    /* padding: 0; */
+    /* margin: auto; */
+    width: 0;
+}
+
+QRadioButton:checked {
+    color: #fff;
+    background-color: #246cc4;
+}
+/* QRadioButton:unchecked {
+    color: #000000;
+} */
+QListWidget::item {
+    margin:10px;
+    border:3px solid #ccc;
+    border-radius:10px;
+    background-color:#f5f5f5;
+    color:#333;
+} 
+QScrollBar{
+    border: 3px solid #ccc;
+    border-radius: 5px;
+    padding: 1px;
+    height: 20px;
+    width: 20px;
+}
+QScrollBar::handle{
+    border-radius: 3px;
+    background: #aaaaaa;
+    min-width: 16px;
+    min-height: 16px;
+}
+QScrollBar::handle:hover{
+    background: #8c8c8c;
+}
+QScrollBar::add-line, QScrollBar::sub-line,
+QScrollBar::add-page, QScrollBar::sub-page {
+    width: 0px;
+    background: transparent;
+}
+QScrollArea{
+    border: none;
+}
+QListWidget {
+    /* 透明 */
+    background-color: transparent;
+    /* 无边框 */
+    border: none;
+}

@@ -74,6 +74,7 @@ def get_user_info() -> dict:
 	"""
 	# https://api.bilibili.com/x/web-interface/nav
 	data: dict = get_response("https://api.bilibili.com/x/web-interface/nav").json()
+	# print(data)
 	name: str = data["data"]["uname"]
 	image_url: str = data["data"]["face"]
 	image_format: str = image_url.split(".")[-1]

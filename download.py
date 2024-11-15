@@ -76,10 +76,10 @@ class DownloadWorker(QRunnable):
             os.remove(f"{self.save_path+self.bv}.mp4")
             os.remove(f"{self.save_path+self.bv}.mp3")
             # os.rename(f"{self.save_path+self.bv}_ok.mp4", f"{self.save_path+self.title}.mp4")
-            self.signals.finished.emit(f"完成：{self.save_path}")
+            self.signals.finished.emit(f"ok")
         except Exception as e:
-            print(f"下载失败: {e}")
-            self.signals.finished.emit(f"失败：{self.save_path}")
+            # print(f"下载失败: {e}")
+            self.signals.finished.emit(e)
 
     def pause(self):
         """ 暂停下载 """

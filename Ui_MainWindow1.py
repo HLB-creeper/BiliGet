@@ -40,12 +40,6 @@ class Ui_MainWindow(object):
 
         self.layout_title.addWidget(self.rb_download)
 
-        self.rb_settings = QRadioButton(self.centralwidget)
-        self.rb_settings.setObjectName(u"rb_settings")
-        self.rb_settings.setChecked(False)
-
-        self.layout_title.addWidget(self.rb_settings)
-
         self.horizontalSpacer_4 = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
 
         self.layout_title.addItem(self.horizontalSpacer_4)
@@ -127,24 +121,14 @@ class Ui_MainWindow(object):
         self.stackedWidget.addWidget(self.tab_search)
         self.tab_download = QWidget()
         self.tab_download.setObjectName(u"tab_download")
-        self.verticalLayout_4 = QVBoxLayout(self.tab_download)
-        self.verticalLayout_4.setObjectName(u"verticalLayout_4")
+        self.verticalLayout_3 = QVBoxLayout(self.tab_download)
+        self.verticalLayout_3.setObjectName(u"verticalLayout_3")
         self.list_downloads = QListWidget(self.tab_download)
         self.list_downloads.setObjectName(u"list_downloads")
 
-        self.verticalLayout_4.addWidget(self.list_downloads)
+        self.verticalLayout_3.addWidget(self.list_downloads)
 
         self.stackedWidget.addWidget(self.tab_download)
-        self.tab_settings = QWidget()
-        self.tab_settings.setObjectName(u"tab_settings")
-        self.verticalLayout_3 = QVBoxLayout(self.tab_settings)
-        self.verticalLayout_3.setObjectName(u"verticalLayout_3")
-        self.list_settings = QListWidget(self.tab_settings)
-        self.list_settings.setObjectName(u"list_settings")
-
-        self.verticalLayout_3.addWidget(self.list_settings)
-
-        self.stackedWidget.addWidget(self.tab_settings)
 
         self.verticalLayout.addWidget(self.stackedWidget)
 
@@ -162,7 +146,6 @@ class Ui_MainWindow(object):
         MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"bilibili\u89c6\u9891\u4e0b\u8f7d\u5668", None))
         self.rb_search.setText(QCoreApplication.translate("MainWindow", u"\u641c\u7d22", None))
         self.rb_download.setText(QCoreApplication.translate("MainWindow", u"\u4e0b\u8f7d", None))
-        self.rb_settings.setText(QCoreApplication.translate("MainWindow", u"\u8bbe\u7f6e", None))
         self.combo_box_type.setItemText(0, QCoreApplication.translate("MainWindow", u"\u5173\u952e\u8bcd", None))
         self.combo_box_type.setItemText(1, QCoreApplication.translate("MainWindow", u"\u94fe\u63a5", None))
         self.combo_box_type.setItemText(2, QCoreApplication.translate("MainWindow", u"BV\u53f7", None))

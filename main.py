@@ -7,74 +7,48 @@ from time import sleep, localtime, strftime
 # from typing import *
 from PySide2.QtWidgets import *
 from PySide2.QtCore import Signal, Qt, QThreadPool
-from PySide2.QtGui import QPixmap
+from PySide2.QtGui import QPixmap, QFont
 from Ui_MainWindow import Ui_MainWindow
-from Ui_UserWindow import Ui_UserWindow
+# from Ui_UserWindow import Ui_UserWindow
 from MyWidget import *
 from download import DownloadWorker
 import func
 import login
 
-__Author__ = "HLB"
-__Version__ = "Version 0.0.0"
-
 
 class MainWindow(QMainWindow, Ui_MainWindow):
     add_video: Signal = Signal(QPixmap, str, str, str, str)
     show_warning: Signal = Signal(str)
+    send_cookie: Signal = Signal(dict)
+    clear_cookie: Signal = Signal()
     def __init__(self, parent=None) -> None:
         super(MainWindow, self).__init__(parent)
         self._setup_ui()
 
         # 类型批注及初始化
+        self.rb_search: QRadioButton
+        self.rb_download: QRadioButton
+        self.rb_settings: QRadioButton
+        self.list_settings: QListWidget
         self.layout_title: QHBoxLayout
         self.combo_box_type: QComboBox
         self.line_edit_url: QLineEdit
         self.pbtn_search: QPushButton
         self.list_videos: QListWidget
         self.list_downloads: QListWidget
-        self.tabWidget: QTabWidget
+        self.stackedWidget: QStackedWidget
+        self.login_status: int = 0 # 0: 未登录且未生成二维码, 1: 已登录, 2: 等待, 3: 重试
+        self.check_login_thread: MyThread = MyThread(parent=self, func=self.check_login)
         # self.list_downloads.setSelectionMode(QListWidget.NoSelection)
         # self.list_videos.setSelectionMode(QListWidget.NoSelection)
-        style_list = """
-QListWidget::item {
-    margin:10px;
-    border:3px solid #ccc;
-    border-radius:10px;
-    background-color:#f5f5f5;
-    color:#333;
-} 
-QScrollBar{
-    border: 3px solid #ccc;
-    border-radius: 5px;
-    padding: 1px;
-    height: 20px;
-    width: 20px;
-}
-QScrollBar::handle{
-    border-radius: 3px;
-    background: #aaaaaa;
-    min-width: 16px;
-    min-height: 16px;
-}
-QScrollBar::handle:hover{
-    background: #8c8c8c;
-}
-QScrollBar::add-line, QScrollBar::sub-line,
-QScrollBar::add-page, QScrollBar::sub-page {
-    width: 0px;
-    background: transparent;
-}
-QScrollArea{
-    border: none;
-}
-"""
-        self.tabWidget.setCurrentIndex(0)
-        self.list_videos.setStyleSheet(style_list)
-        self.list_downloads.setStyleSheet(style_list)
+        with open('style.qss', 'r', encoding='utf-8') as f:
+            self.setStyleSheet(f.read())
+        self.stackedWidget.setCurrentIndex(0)
         # self.list_videos.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn) # 总是显示滚动条
         self.pbtn_download: QPushButton
         self.cookie: str = ""
+        self.user_info: dict = {}
+        self.is_ok: bool = False
         self.search_thread: MyThread = None
         self.pbtn_reverse: QPushButton
         self.pbtn_select_all: QPushButton
@@ -85,11 +59,14 @@ QScrollArea{
         self.read_config()
 
         # 绑定信号与槽
-        self.user_window.send_cookie.connect(self.update_cookie)
-        self.user_window.clear_cookie.connect(lambda: self.update_cookie(""))
-        self.user_window.write_config.connect(self.write_config)
-        self.btn_user.clicked.connect(self.login)
-        self.btn_setting.clicked.connect(lambda: print("setting clicked"))
+        self.rb_search.clicked.connect(lambda: self.change_tab(0))
+        self.rb_download.clicked.connect(lambda: self.change_tab(1))
+        self.rb_settings.clicked.connect(lambda: self.change_tab(2))
+        # self.user_window.send_cookie.connect(self.update_cookie)
+        # self.user_window.clear_cookie.connect(lambda: self.update_cookie(""))
+        # self.user_window.write_config.connect(self.write_config)
+        self.btn_user.clicked.connect(self.on_user_clicked)
+        # self.btn_setting.clicked.connect(lambda: print("setting clicked"))
         self.pbtn_search.clicked.connect(self.search_video)
         self.add_video.connect(self.add_video_item)
         self.pbtn_download.clicked.connect(self.start_download)
@@ -100,53 +77,72 @@ QScrollArea{
 
     def _setup_ui(self) -> None:
         self.setupUi(self)
-        
-        # 登录窗口
-        self.user_window = UserWindow()
-        self.user_window.mode = 'logout'
-
-        # 用户按钮
+        # 设置界面初始化
+        # -----用户设置-----
+        user_widget = QWidget()
+        layout = QHBoxLayout(user_widget)
         self.btn_user: RoundClickableLabel = RoundClickableLabel()
-        self.btn_user.setFixedSize(50, 50)
-        self.btn_user.setPixmap(QPixmap('./img/user.png'))
-        self.layout_title.addWidget(self.btn_user)
-
-        # 设置按钮
-        self.btn_setting: RoundClickableLabel = RoundClickableLabel()
-        self.btn_setting.setFixedSize(50, 50)
-        self.btn_setting.setPixmap(QPixmap('./img/setting.png'))
-        self.layout_title.addWidget(self.btn_setting)
+        self.btn_user.setFixedSize(150, 150)
+        # self.btn_user.setPixmap(QPixmap('./img/user.png'))
+        layout.addWidget(self.btn_user)
+        self.label_user = QLabel()
+        self.label_user.setFont(QFont("Microsoft YaHei", 12, QFont.Bold))
+        layout.addWidget(self.label_user)
+        user_item = QListWidgetItem(self.list_settings)
+        user_item.setSizeHint(QSize(self.list_settings.width(), 220))
+        self.list_settings.addItem(user_item)
+        self.list_settings.setItemWidget(user_item, user_widget)
+        # -----使用说明-----
+        markdown_widget = MarkdownViewer("./README.md")
+        markdown_item = QListWidgetItem(self.list_settings)
+        markdown_item.setSizeHint(QSize(self.list_settings.width(), markdown_widget.height()+50))
+        self.list_settings.addItem(markdown_item)
+        self.list_settings.setItemWidget(markdown_item, markdown_widget)
 
     # ====================槽函数====================
+    def change_tab(self, index: int) -> None:
+        now_index = self.stackedWidget.currentIndex()
+        self.stackedWidget.setCurrentIndex(index)
+        if now_index == 2:
+            try:
+                self.check_login_thread.terminate()
+                print('stop check login status thread')
+            except:
+                pass
+        if index == 2:
+            if self.login_status == 1:
+                self.is_ok = True
+                if not (self.user_info):
+                    self.user_info = login.get_user_info()
+                    print(f"get user info: {self.user_info}")
+                self.btn_user.is_round = True
+                self.btn_user.setPixmap(self.user_info["image"])
+                self.label_user.setText(f'欢迎, {self.user_info["name"]}')
+            else:
+                self.login()
+                return
+
     def login(self) -> None:
-        if self.user_window.isVisible():
-            QMessageBox.warning(self, '警告', '请先关闭登录窗口！')
-            return
-        if not self.cookie:
-            self.user_window.mode = 'login'
-            self.user_window.show()
-        else:
-            self.user_window.mode = 'logout'
-            self.user_window.show()
-    
-    def closeEvent(self, event) -> None:
-        self.user_window.close()
-        try:
-            self.search_thread.terminate()
-        except Exception as e:
-            # print(e)
-            pass
-        event.accept()
+        self.login_status = 0
+        self.mode = "login"
+        self.is_ok = False
+        print('login mode')
+        qrcode = login.get_qrcode()
+        self.btn_user.setPixmap(qrcode)
+        self.btn_user.is_round = False
+        self.label_user.setText('请使用bilibili客户端扫描二维码登录')
+        # print(self.check_login_thread)
+        self.check_login_thread.start()
 
     def update_cookie(self, cookies: str = None) -> None:
         self.write_config()
         if(cookies != None): 
             self.cookie = cookies
         if self.cookie: 
-            self.user_window.mode = 'logout'
+            self.login_status = 1
         login.session.headers.update({"Cookie": self.cookie})
         func.headers["Cookie"] = self.cookie
-        self.update_uface()
+        # self.update_uface()
         self.write_config()
 
     def search_video(self) -> None:
@@ -194,6 +190,19 @@ QScrollArea{
         for i in range(self.list_videos.count()):
             item = self.list_videos.item(i)
             item.check_box.setChecked(True)
+    
+    def on_user_clicked(self) -> None:
+        if self.login_status == 1:
+            if QMessageBox.question(
+                self, 
+                '确认', 
+                '确认退出登录吗？', 
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
+            ) == QMessageBox.Yes:
+                self.clear_cookie.emit()
+            else:
+                return
+        self.login()
     
     def select_reverse(self) -> None:
         for i in range(self.list_videos.count()):
@@ -304,124 +313,120 @@ QScrollArea{
     def update_uface(self) -> None:
         if not self.cookie:
             return
-        if not (self.user_window.user_info):
-            self.user_window.user_info = login.get_user_info()
-            print(f"get user info: {self.user_window.user_info}")
-        self.btn_user.setPixmap(self.user_window.user_info["image"])
-
-    # ====================重写事件====================
-    def keyPressEvent(self, event) -> None:
-        if event.key() == Qt.Key_Return:
-            self.search_video()
-
-class UserWindow(QMainWindow, Ui_UserWindow):
-    send_cookie: Signal = Signal(dict)
-    clear_cookie: Signal = Signal()
-    write_config: Signal = Signal()
-    def __init__(self, parent=None, mode: str = 'login') -> None:
-        super(UserWindow, self).__init__(parent)
-        self._setup_ui()
-
-        # 类型批注及初始化
-        self.label: QLabel
-        self.mode: str = mode
-        self.layout_qrcode: QVBoxLayout
-        self.cookie: str = ""
-        self.status: int = 0 # 0: 等待, 1: 已登录, 2: 重试
-        self.check_login_thread: MyThread = MyThread(parent=self, func=self.check_login)
-        self.is_ok: bool = False
-        self.name: str = ""
-        self.face: QPixmap = None
-        self.user_info: dict = {}
-
-        # 绑定信号与槽
-        self.image.clicked.connect(self.on_image_clicked)
-
-    def _setup_ui(self) -> None:
-        self.setupUi(self)
-
-        # 二维码
-        self.image: ClickableLabel = ClickableLabel()
-        self.image.setFixedSize(350, 350)
-        self.layout_qrcode.addWidget(self.image, alignment=Qt.AlignCenter)
-
-    def login(self) -> None:
-        self.status = 0
-        self.mode = "login"
-        self.is_ok = False
-        print('login mode')
-        qrcode = login.get_qrcode()
-        self.image.setPixmap(qrcode)
-        self.label.setText('请使用bilibili客户端扫描二维码登录')
-        # print(self.check_login_thread)
-        self.check_login_thread.start()
-
-    def closeEvent(self, event) -> None:
-        try:
-            if self.check_login_thread.isRunning():
-                # self.check_login_thread.terminate()
-                self.is_ok = True
-                self.check_login_thread.wait()
-                print('stop check login status thread')
-        except:
-            pass
-        event.accept()
+        if not (self.user_info):
+            self.user_info = login.get_user_info()
+            print(f"get user info: {self.user_info}")
+        self.btn_user.is_round = True
+        self.btn_user.setPixmap(self.user_info["image"])
     
-    def showEvent(self, event) -> None:
-        print('show user window')
-        if self.mode == "login":
-            self.login()
-            event.accept()
-            return
-        if self.mode == "logout":
-            self.status = 1
-            self.is_ok = True
-            if not (self.user_info):
-                self.user_info = login.get_user_info()
-                print(f"get user info: {self.user_info}")
-            self.image.setPixmap(self.user_info["image"])
-            self.label.setText(f'欢迎, {self.user_info["name"]}')
-
     def check_login(self) -> None:
         while not self.is_ok:
             status = login.get_status()
             if status == 0: # 已确认登录
-                self.status = 1
+                self.login_status = 1
                 self.is_ok = True
                 self.cookie = '; '.join([f'{key}={value}' for key, value in login.session.cookies.get_dict().items()])
                 self.send_cookie.emit(self.cookie)
-                self.write_config.emit()
+                self.write_config()
                 self.user_info = login.get_user_info()
                 print(f"get user info: {self.user_info}")
-                self.image.setPixmap(self.user_info["image"])
-                self.label.setText(f'欢迎, {self.user_info["name"]}')
+                self.btn_user.is_round = True
+                self.btn_user.setPixmap(self.user_info["image"])
+                self.label_user.setText(f'欢迎, {self.user_info["name"]}')
                 print(f"login success")
             elif status == 86101: # 未扫码
-                pass
+                self.login_status = 2
             elif status == 86090: # 二维码已扫码未确认
-                self.image.setPixmap(QPixmap('./img/ok.png'))
-                self.label.setText('已扫描二维码, 请确认登录')
+                self.btn_user.is_round = True
+                self.btn_user.setPixmap(QPixmap('./img/ok.png'))
+                self.label_user.setText('已扫描二维码, 请确认登录')
+                self.login_status = 2
             elif status == 86038: # 二维码已失效
-                self.image.setPixmap(QPixmap('./img/refresh.png'))
-                self.status = 2
+                self.btn_user.is_round = True
+                self.btn_user.setPixmap(QPixmap('./img/refresh.png'))
+                self.login_status = 3
                 self.is_ok = True
                 print('qrcode expired')
-                self.label.setText('二维码已失效, 请刷新')
+                self.label_user.setText('二维码已失效, 请刷新')
             print(f"check login status: {status}")
             sleep(1)
 
-    def on_image_clicked(self) -> None:
-        if self.status == 2:
-            self.login()
-        if self.status == 1:
-            if QMessageBox.question(
-                self, 
-                '确认', 
-                '确认退出登录吗？', 
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
-            ) == QMessageBox.Yes:
-                self.clear_cookie.emit()
-                self.login()
+    # ====================重写事件====================
+    def closeEvent(self, event) -> None:
+        # self.user_window.close()
+        try:
+            self.search_thread.terminate()
+        except Exception as e:
+            # print(e)
+            pass
+        try:
+            self.check_login_thread.terminate()
+        except Exception as e:
+            # print(e)
+            pass
+        event.accept()
+    
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key_Return:
+            self.search_video()
+
+# class UserWindow(QMainWindow, Ui_UserWindow):
+#     send_cookie: Signal = Signal(dict)
+#     clear_cookie: Signal = Signal()
+#     write_config: Signal = Signal()
+#     def __init__(self, parent=None, mode: str = 'login') -> None:
+#         super(UserWindow, self).__init__(parent)
+#         self._setup_ui()
+
+#         # 类型批注及初始化
+#         self.label: QLabel
+#         self.mode: str = mode
+#         self.layout_qrcode: QVBoxLayout
+#         self.cookie: str = ""
+#         self.login_status: int = 0 # 0: 等待, 1: 已登录, 2: 重试
+#         self.check_login_thread: MyThread = MyThread(parent=self, func=self.check_login)
+#         self.is_ok: bool = False
+#         self.name: str = ""
+#         self.face: QPixmap = None
+#         self.user_info: dict = {}
+
+#         # 绑定信号与槽
+#         self.image.clicked.connect(self.on_image_clicked)
+
+#     def _setup_ui(self) -> None:
+#         self.setupUi(self)
+
+#         # 二维码
+#         self.image: ClickableLabel = ClickableLabel()
+#         self.image.setFixedSize(350, 350)
+#         self.layout_qrcode.addWidget(self.image, alignment=Qt.AlignCenter)
+
+#     def closeEvent(self, event) -> None:
+#         try:
+#             if self.check_login_thread.isRunning():
+#                 # self.check_login_thread.terminate()
+#                 self.is_ok = True
+#                 self.check_login_thread.wait()
+#                 print('stop check login status thread')
+#         except:
+#             pass
+#         event.accept()
+    
+#     def showEvent(self, event) -> None:
+#         print('show user window')
+#         if self.mode == "login":
+#             self.login()
+#             event.accept()
+#             return
+#         if self.mode == "logout":
+#             self.login_status = 1
+#             self.is_ok = True
+#             if not (self.user_info):
+#                 self.user_info = login.get_user_info()
+#                 print(f"get user info: {self.user_info}")
+#             self.image.setPixmap(self.user_info["image"])
+#             self.label.setText(f'欢迎, {self.user_info["name"]}')
+
 
 def main() -> None:
     app = QApplication([])
